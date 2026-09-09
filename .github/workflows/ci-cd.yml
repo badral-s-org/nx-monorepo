@@ -97,7 +97,16 @@ jobs:
         run: npm install -g vercel@59.13.1
       - name: Get affected projects
         run: |
-          npx nx show projects --affected
+          PROJECT=$(npx nx show projects --affected | head -n 1)
+
+           PROJECT_NAME=$(echo "$PROJECT" \
+           | sed 's/^@org\///' \
+           | tr '[:lower:]-' '[:upper:]_')
+
+           echo "PROJECT_NAME=$PROJECT_NAME" >> "$GITHUB_ENV"
+
+           echo "Project: $PROJECT"
+           echo "Project name: $PROJECT_NAME"
       - name: Deploy Affected Projects to Vercel
         run: npx nx affected --target=deploy
         env:
