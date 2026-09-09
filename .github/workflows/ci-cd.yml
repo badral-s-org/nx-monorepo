@@ -95,20 +95,38 @@ jobs:
 
       - name: Install Vercel CLI
         run: npm install -g vercel@59.13.1
-      - name: Get affected projects
-        run: |
-          PROJECT=$(npx nx show projects --affected | head -n 1)
 
-           PROJECT_NAME=$(echo "$PROJECT" \
-           | sed 's/^@org\///' \
-           | tr '[:lower:]-' '[:upper:]_')
-
-           echo "PROJECT_NAME=$PROJECT_NAME" >> "$GITHUB_ENV"
-
-           echo "Project: $PROJECT"
-           echo "Project name: $PROJECT_NAME"
-      - name: Deploy Affected Projects to Vercel
-        run: npx nx affected --target=deploy
+      - name: Deploy affected projects
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+
+          SECRET_MANAGER_WEB: ${{ secrets.SECRET_MANAGER_WEB }}
+          SECRET_MANAGER_SERVICE: ${{ secrets.SECRET_MANAGER_SERVICE }}
+
+        run: |
+          PROJECTS=$(npx nx show projects --affected)
+
+          for PROJECT in $PROJECTS; do
+            echo "======================================"
+            echo "Deploying: $PROJECT"
+            echo "======================================"
+
+            PROJECT_NAME=$(echo "$PROJECT" \
+              | sed 's/^@org\///' \
+              | tr '[:lower:]-' '[:upper:]_')
+
+            echo "Secret name: $PROJECT_NAME"
+
+            VERCEL_PROJECT_ID="${!PROJECT_NAME}"
+
+            if [ -z "$VERCEL_PROJECT_ID" ]; then
+              echo "ERROR: No Vercel Project ID found for $PROJECT"
+              exit 1
+            fi
+
+            echo "Deploying $PROJECT with Vercel Project ID"
+
+            VERCEL_PROJECT_ID="$VERCEL_PROJECT_ID" \
+              npx nx run "$PROJECT:deploy"
+          done
