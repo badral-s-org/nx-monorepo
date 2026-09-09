@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD Pipeline
 
 on:
   push:
@@ -11,21 +11,17 @@ permissions:
   contents: read
 
 jobs:
-  main:
+  ci-build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
           filter: tree:0
           fetch-depth: 0
 
-      # This enables task distribution via Nx Cloud
-      # Run this command as early as possible, before dependencies are installed
-      # Learn more at https://nx.dev/docs/reference/nx-cloud-cli#npx-nxcloud-startcirun
-      - run: npx nx start-ci-run --distribute-on="3 linux-medium-js" --stop-agents-after="e2e"
+      - run: npx nx start-ci-run --distribute-on="3 linux-medium-js" --stop-agents-after="build"
 
-      # Cache node_modules
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: 'npm'
@@ -35,6 +31,32 @@ jobs:
 
       - name: Run Affected Builds
         run: npx nx affected -t build
-      # Nx Cloud recommends fixes for failures to help you get CI green faster. Learn more: https://nx.dev/docs/features/ci-features/self-healing-ci
+
       - run: npx nx fix-ci
         if: always()
+
+  # cd-deploy:
+  #   needs: ci-build # CI амжилттай болсны дараа ажиллана
+  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         filter: tree:0
+  #         fetch-depth: 0
+
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: 24
+  #         cache: 'npm'
+
+  #     - name: Install Dependencies
+  #       run: npm ci
+
+  #     # Main дээр нэгдсэн өөрчлөлтүүдийг deploy хийнэ
+  #     # (Жич: Таны аппликейшнуудын project.json дотор "deploy" target суусан байх шаардлагатай)
+  #     - name: Deploy Affected Apps
+  #       run: npx nx affected -t deploy
+  #       env:
+  #         # Шаардлагатай бол deploy-д ашиглах нууц үг, хандах эрхүүдийг энд дамжуулна
+  #         DEPLOY_SECRET_KEY: ${{ secrets.DEPLOY_SECRET_KEY }}
