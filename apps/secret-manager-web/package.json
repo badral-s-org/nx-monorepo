@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "test": "jest",
+    "build": "next build",
     "deploy": "vercel pull --yes --environment=production && vercel build --prod && vercel deploy --prebuilt --prod",
     "vercel-build": "npx nx build secret-manager-web"
   },
