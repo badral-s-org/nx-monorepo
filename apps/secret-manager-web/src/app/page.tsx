@@ -1,3 +1,3 @@
 export default function Index() {
-  return <div className="bg-red-500">gsdgdsgdsg</div>;
+  return <div className="bg-red-500">gsdggdsg</div>;
 }
