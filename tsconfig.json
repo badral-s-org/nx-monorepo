@@ -32,6 +32,9 @@
     },
     {
       "path": "./packages/shared/test-utils"
+    },
+    {
+      "path": "./apps/secret-manager-web"
     }
   ]
 }
