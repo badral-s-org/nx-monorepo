@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "test": "jest",
-    "deploy": "VERCEL_PROJECT_ID=prj_lKAgGc5R2E3Jk3TGg2jnPDD9gg02 vercel env pull --yes --environment=production && VERCEL_PROJECT_ID=prj_lKAgGc5R2E3Jk3TGg2jnPDD9gg02 vercel build --prod && VERCEL_PROJECT_ID=prj_lKAgGc5R2E3Jk3TGg2jnPDD9gg02 vercel deploy --prebuilt --prod"
+    "deploy": "export VERCEL_PROJECT_ID=prj_lKAgGc5R2E3Jk3TGg2jnPDD9gg02 && vercel env pull --yes --environment=production && vercel build --prod && vercel deploy --prebuilt --prod"
   },
   "dependencies": {
     "next": "~16.1.6",
