@@ -56,3 +56,5 @@ test-output
 # Next.js
 .next
 out
+.vercel
+.env*

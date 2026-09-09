@@ -2,6 +2,10 @@
   "name": "@org/secret-manager-web",
   "version": "0.0.1",
   "private": true,
+  "scripts": {
+    "test": "jest",
+    "deploy": "VERCEL_PROJECT_ID=prj_lKAgGc5R2E3Jk3TGg2jnPDD9gg02 vercel env pull --yes --environment=production && VERCEL_PROJECT_ID=prj_lKAgGc5R2E3Jk3TGg2jnPDD9gg02 vercel deploy --prebuilt --prod"
+  },
   "dependencies": {
     "next": "~16.1.6",
     "react": "^19.0.0",
