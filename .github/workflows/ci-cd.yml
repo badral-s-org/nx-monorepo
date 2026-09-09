@@ -19,6 +19,9 @@ jobs:
           filter: tree:0
           fetch-depth: 0
 
+      - name: Derive appropriate SHAs for Nx affected commands
+        uses: nrwl/nx-set-shas@v4
+
       - run: npx nx start-ci-run --distribute-on="3 linux-medium-js" --stop-agents-after="build"
 
       - uses: actions/setup-node@v4
