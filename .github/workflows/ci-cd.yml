@@ -13,24 +13,37 @@ permissions:
 jobs:
   ci-build:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
         with:
           filter: tree:0
           fetch-depth: 0
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
       - name: Derive appropriate SHAs for Nx affected commands
         uses: nrwl/nx-set-shas@v4
 
-      - run: npx nx start-ci-run --distribute-on="3 linux-medium-js" --stop-agents-after="build"
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: 'npm'
-
       - name: Install Dependencies
         run: npm ci
+
+      - name: Approve install scripts
+        run: |
+          npm install-scripts approve \
+            @parcel/watcher \
+            sharp \
+            @swc/core \
+            esbuild \
+            less \
+            nx \
+            unrs-resolver
+
+      - run: npx nx start-ci-run --distribute-on="3 linux-medium-js" --stop-agents-after="build"
 
       - name: Run Affected Builds
         run: npx nx affected -t build
@@ -41,26 +54,47 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: ci-build
-    if: github.ref == 'refs/heads/main' # Зөвхөн main branch дээр push хийгдэхэд деплой ажиллана (Pull Request дээр ажиллахгүй)
+
+    if: github.ref == 'refs/heads/main'
+
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Nx affected ажиллахад Git түүх заавал хэрэгтэй
+          filter: tree:0
+          fetch-depth: 0
 
-      - name: Derive appropriate SHAs for Nx affected commands
-        uses: nrwl/nx-set-shas@v4 # Git SHA харьцуулалтыг энд бас ажиллуулна
-
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: 'npm'
+          cache: npm
+
+      - name: Derive appropriate SHAs for Nx affected commands
+        uses: nrwl/nx-set-shas@v4
 
       - name: Install Dependencies
-        run: npm ci # Nxaffected ажиллуулахад багцууд суусан байх ёстой
+        run: npm ci
 
-      - name: Install Vercel CLI Globally
-        run: npm install -g vercel
+      - name: Approve install scripts
+        run: |
+          npm install-scripts approve \
+            @parcel/watcher \
+            sharp \
+            @swc/core \
+            esbuild \
+            less \
+            nx \
+            unrs-resolver
+
+      - name: Verify client-only
+        run: |
+          echo "Checking client-only..."
+          npm ls client-only
+          test -f node_modules/client-only/index.js
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@59.13.1
 
       - name: Deploy Affected Projects to Vercel
         run: npx nx affected --target=deploy
