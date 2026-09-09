@@ -96,7 +96,8 @@ jobs:
       - name: Install Vercel CLI
         run: npm install -g vercel@59.13.1
       - name: $NX_TASK_TARGET_PROJECT
-        run: echo $NX_TASK_TARGET_PROJECT
+        run: |
+          echo "Projects: $NX_TASK_TARGET_PROJECT"
       - name: Deploy Affected Projects to Vercel
         run: npx nx affected --target=deploy
         env:
