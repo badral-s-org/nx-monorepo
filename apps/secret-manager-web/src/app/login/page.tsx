@@ -30,7 +30,7 @@ const Page = () => {
         </Button>
         <p className="text-center text-2xl font-bold">Secret manager login</p>
       </div>
-      <Card className="max-w-120 mx-auto mt-4">
+      <Card className="max-w-120 mx-auto mt-4 ">
         <CardContent>{COMPONENT_MAP[step]}</CardContent>
       </Card>
     </div>
