@@ -133,6 +133,7 @@ authRouter.post('/verify-otp', async (c) => {
 
     response.data = { id: user.id, email: user.email };
     response.message = 'Successfully signed in';
+
     response.statusCode = 200;
     response.success = true;
 
