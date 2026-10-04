@@ -48,6 +48,9 @@
       }
     },
     {
+      "plugin": "@naxodev/nx-cloudflare/plugin"
+    },
+    {
       "plugin": "@nx/vite/plugin",
       "options": {
         "buildTargetName": "build",

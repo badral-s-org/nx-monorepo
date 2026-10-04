@@ -35,6 +35,12 @@
     },
     {
       "path": "./apps/secret-manager-web"
+    },
+    {
+      "path": "./libs/ui"
+    },
+    {
+      "path": "./apps/secret-manager-service"
     }
   ]
 }

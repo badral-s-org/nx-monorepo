@@ -1,0 +1,8 @@
+
+
+POST http://localhost:8787/api/auth/send-otp
+Content-Type: application/json
+
+{
+    "email":"badralbaigalmaa7@gmail.com"
+}

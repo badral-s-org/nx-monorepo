@@ -1,0 +1,110 @@
+{
+  "name": "@org/secret-manager-service",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "db-generate": "npx drizzle-kit generate --config=drizzle.config.ts",
+    "db-migrate-local": "npx wrangler d1 migrations apply secret-manager --local -c wrangler.jsonc",
+    "db-migrate-prod": "npx wrangler d1 migrations apply secret-manager --remote -c wrangler.jsonc"
+  },
+  "nx": {
+    "targets": {
+      "db-generate": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "npx drizzle-kit generate --config=apps/secret-manager-service/drizzle.config.ts"
+        }
+      },
+      "db-migrate-local": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "npx wrangler d1 migrations apply secret-manager --local -c apps/secret-manager-service/wrangler.jsonc"
+        }
+      },
+      "db-migrate-prod": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "npx wrangler d1 migrations apply secret-manager --remote -c apps/secret-manager-service/wrangler.jsonc"
+        }
+      },
+      "build": {
+        "executor": "@nx/esbuild:esbuild",
+        "outputs": [
+          "{options.outputPath}"
+        ],
+        "defaultConfiguration": "production",
+        "options": {
+          "platform": "node",
+          "outputPath": "apps/secret-manager-service/dist",
+          "format": [
+            "cjs"
+          ],
+          "bundle": false,
+          "main": "apps/secret-manager-service/src/index.ts",
+          "tsConfig": "apps/secret-manager-service/tsconfig.app.json",
+          "assets": [
+            "apps/secret-manager-service/src/assets"
+          ],
+          "esbuildOptions": {
+            "sourcemap": true,
+            "outExtension": {
+              ".js": ".js"
+            }
+          }
+        },
+        "configurations": {
+          "development": {},
+          "production": {
+            "esbuildOptions": {
+              "sourcemap": false,
+              "outExtension": {
+                ".js": ".js"
+              }
+            }
+          }
+        }
+      },
+      "prune-lockfile": {
+        "dependsOn": [
+          "build"
+        ],
+        "cache": true,
+        "executor": "@nx/js:prune-lockfile",
+        "outputs": [
+          "{workspaceRoot}/apps/secret-manager-service/dist/package.json",
+          "{workspaceRoot}/apps/secret-manager-service/dist/package-lock.json"
+        ],
+        "options": {
+          "buildTarget": "build"
+        }
+      },
+      "copy-workspace-modules": {
+        "dependsOn": [
+          "build"
+        ],
+        "cache": true,
+        "outputs": [
+          "{workspaceRoot}/apps/secret-manager-service/dist/workspace_modules"
+        ],
+        "executor": "@nx/js:copy-workspace-modules",
+        "options": {
+          "buildTarget": "build"
+        }
+      },
+      "prune": {
+        "dependsOn": [
+          "prune-lockfile",
+          "copy-workspace-modules"
+        ],
+        "executor": "nx:noop"
+      },
+      "serve": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "npx wrangler dev apps/secret-manager-service/src/index.ts --remote"
+        }
+      }
+    }
+  },
+  "dependencies": {}
+}
