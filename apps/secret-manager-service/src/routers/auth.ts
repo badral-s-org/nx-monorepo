@@ -157,8 +157,11 @@ authRouter.get('/session', isLoggedIn, async (c: Context<AppEnv>) => {
   const user = c.get('user');
 
   response.data = user;
+
   response.message = 'Successfully fetched';
+
   response.statusCode = 200;
+
   response.success = true;
 
   return c.json(response, response.statusCode);
