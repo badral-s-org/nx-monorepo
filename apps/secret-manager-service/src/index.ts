@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { authRouter } from './routers/auth';
+import { secretRouter } from './routers/secret';
 
 const app = new Hono<{ Bindings: Bindings }>().basePath('/api');
 
@@ -19,6 +20,8 @@ app.use(
 );
 
 app.route('/auth', authRouter);
+
+app.route('/secrets', secretRouter);
 
 app.get('/', (c) => {
   return c.text('Hello from Hono on Cloudflare Workers inside Nx!');

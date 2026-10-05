@@ -109,9 +109,9 @@ authRouter.post('/verify-otp', async (c) => {
       return c.json(response, response.statusCode);
     }
 
-    // await DB.update(Users)
-    //   .set({ otpExpiration: null })
-    //   .where(eq(Users.email, email));
+    await DB.update(Users)
+      .set({ otpExpiration: null })
+      .where(eq(Users.email, email));
 
     const ACCESS_TOKEN = generateToken(user);
 
@@ -154,7 +154,7 @@ authRouter.post('/verify-otp', async (c) => {
 
 authRouter.get('/session', isLoggedIn, async (c: Context<AppEnv>) => {
   const response: ApiResponse = {};
-  console.log('api');
+
   const user = c.get('user');
 
   response.data = user;

@@ -1,0 +1,1 @@
+ALTER TABLE `secrets` ADD `key` text NOT NULL;
