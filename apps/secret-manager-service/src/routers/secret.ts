@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { isLoggedIn } from '../utils/auth';
 import { getDB } from '../configs/drizzleProvider';
-import { encryptSecret } from '../utils/encoder';
+import { decryptSecret, encryptSecret } from '../utils/encoder';
 import { Groups, Secrets, SecretType } from '../db';
 import { eq } from 'drizzle-orm';
 
@@ -17,8 +17,25 @@ secretRouter.get('/get-secrets', isLoggedIn, async (c) => {
       },
     });
 
+    const decryptedGroups = groups.map(async (group) => ({
+      ...group,
+      secrets: await Promise.all(
+        group.secrets.map(async (secret) => ({
+          id: secret.id,
+          groupId: secret.groupId,
+          createdAt: secret.createdAt,
+          updatedAt: secret.updatedAt,
+          key: secret.key,
+          secret: await decryptSecret({
+            iv: secret.iv,
+            secret: secret.secret,
+          }),
+        })),
+      ),
+    }));
+
     const response: ApiResponse = {
-      data: groups,
+      data: decryptedGroups,
       message: 'Successfully fetched',
       statusCode: 200,
       success: true,
@@ -101,8 +118,47 @@ secretRouter.post('/put-secrets', isLoggedIn, async (c) => {
   }
 });
 
-secretRouter.put('/update-secret', isLoggedIn, (c) => {
+secretRouter.put('/update-secret/:id', isLoggedIn, async (c) => {
   const DB = getDB(c.env);
+  const id = c.req.param('id') ? Number(c.req.param('id')) : 0;
+
+  const { value, key } = await c.req.json();
   try {
-  } catch (error) {}
+    const secret = await DB.query.Secrets.findFirst({
+      where: eq(Secrets.id, id),
+    });
+
+    const response: ApiResponse = {};
+
+    if (!secret) {
+      response.data = null;
+      response.message = 'secret not found';
+      response.statusCode = 404;
+      response.success = false;
+
+      return c.json(response, response.statusCode);
+    }
+
+    const { ciphertext, iv } = await encryptSecret(value);
+
+    const updated = await DB.update(Secrets)
+      .set({ iv: iv + '', secret: ciphertext + '', key })
+      .where(eq(Secrets.id, id))
+      .returning()
+      .get();
+
+    response.data = updated;
+    response.message = 'Successfully updated';
+    response.statusCode = 200;
+    response.success = true;
+    return c.json(response, response.statusCode);
+  } catch (error) {
+    console.log(error);
+    const response: ApiResponse = {};
+    response.data = null;
+    response.message = 'Interval Server Error !';
+    response.statusCode = 500;
+    response.success = false;
+    return c.json(response, response.statusCode);
+  }
 });
