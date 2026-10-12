@@ -1,5 +1,4 @@
 const encoder = new TextEncoder();
-const decoder = new TextDecoder();
 
 const fromBase64 = (base64: string): Uint8Array<ArrayBuffer> => {
   const binary = atob(base64);
