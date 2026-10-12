@@ -162,3 +162,48 @@ secretRouter.put('/update-secret/:id', isLoggedIn, async (c) => {
     return c.json(response, response.statusCode);
   }
 });
+
+secretRouter.post('/create-group', isLoggedIn, async (c) => {
+  const DB = getDB(c.env);
+
+  try {
+    const { groupName } = await c.req.json();
+
+    const response: ApiResponse = {};
+
+    const group = await DB.query.Groups.findFirst({
+      where: eq(Groups.name, groupName),
+    });
+
+    if (group) {
+      response.data = null;
+      response.message = 'Group already exists';
+      response.statusCode = 409;
+      response.success = false;
+      return c.json(response, response.statusCode);
+    }
+
+    const addedGroup = await DB.insert(Groups)
+      .values({ name: groupName })
+      .returning()
+      .get();
+
+    response.data = addedGroup;
+    response.message = 'Successfully added';
+    response.success = true;
+    response.statusCode = 200;
+
+    return c.json(response, response.statusCode);
+  } catch (error) {
+    console.log(error);
+
+    const response: ApiResponse = {};
+
+    response.data = null;
+    response.statusCode = 500;
+    response.success = false;
+    response.message = 'Internal Server Error!';
+
+    return c.json(response, response.statusCode);
+  }
+});

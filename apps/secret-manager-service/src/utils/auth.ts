@@ -32,20 +32,22 @@ export const isLoggedIn = async (c: Context<AppEnv>, next: Next) => {
     success: false,
   };
 
-  if (!accessToken) {
+  if (!accessToken && !refreshToken) {
     return c.json(response, response.statusCode);
   }
 
   try {
-    const payload: any = jwt.verify(
-      accessToken,
-      process.env.TOKEN_SECRET ?? '',
-      { algorithms: ['HS256'] },
-    );
+    if (accessToken) {
+      const payload: any = jwt.verify(
+        accessToken,
+        process.env.TOKEN_SECRET ?? '',
+        { algorithms: ['HS256'] },
+      );
 
-    c.set('user', payload.user);
+      c.set('user', payload.user);
 
-    return await next();
+      return await next();
+    }
   } catch (error) {
     if (!(error instanceof jwt.TokenExpiredError)) {
       return c.json(response, response.statusCode);
