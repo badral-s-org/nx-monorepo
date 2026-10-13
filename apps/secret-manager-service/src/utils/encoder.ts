@@ -6,6 +6,9 @@ const fromBase64 = (base64: string): Uint8Array<ArrayBuffer> => {
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 };
 
+export const toB64 = (buf: ArrayBuffer | Uint8Array) =>
+  btoa(String.fromCharCode(...new Uint8Array(buf)));
+
 const base64Decode = (value: string): Uint8Array => {
   return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
 };

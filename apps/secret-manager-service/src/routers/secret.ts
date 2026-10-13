@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { isLoggedIn } from '../utils/auth';
 import { getDB } from '../configs/drizzleProvider';
-import { decryptSecret, encryptSecret } from '../utils/encoder';
+import { decryptSecret, encryptSecret, toB64 } from '../utils/encoder';
 import { Groups, Secrets, SecretType } from '../db';
 import { eq } from 'drizzle-orm';
 
@@ -17,7 +17,71 @@ secretRouter.get('/get-secrets', isLoggedIn, async (c) => {
       },
     });
 
-    const decryptedGroups = groups.map(async (group) => ({
+    const decryptedGroups = await Promise.all(
+      groups.map(async (group) => ({
+        ...group,
+        secrets: await Promise.all(
+          group.secrets.map(async (secret) => ({
+            id: secret.id,
+            groupId: secret.groupId,
+            createdAt: secret.createdAt,
+            updatedAt: secret.updatedAt,
+            key: secret.key,
+            secret: await decryptSecret({
+              iv: secret.iv,
+              secret: secret.secret,
+            }),
+          })),
+        ),
+      })),
+    );
+
+    const response: ApiResponse = {
+      data: decryptedGroups,
+      message: 'Successfully fetched',
+      statusCode: 200,
+      success: true,
+    };
+
+    return c.json(response, 200);
+  } catch (error) {
+    console.error('Failed to fetch secrets:', error && (error as Error).cause);
+
+    const response: ApiResponse = {
+      data: null,
+      message: 'Something went wrong!',
+      statusCode: 500,
+      success: false,
+    };
+
+    return c.json(response, 500);
+  }
+});
+
+secretRouter.get('/get-secrets/:id', isLoggedIn, async (c) => {
+  const DB = getDB(c.env);
+
+  try {
+    const groupId = c.req.param('id') ? Number(c.req.param('id')) : 0;
+
+    const group = await DB.query.Groups.findFirst({
+      where: eq(Groups.id, groupId),
+      with: {
+        secrets: true,
+      },
+    });
+
+    const response: ApiResponse = {};
+
+    if (!group) {
+      response.data = null;
+      response.message = 'Group not found';
+      response.statusCode = 404;
+      response.success = false;
+      return c.json(response, response.statusCode);
+    }
+
+    const decryptedGroup = {
       ...group,
       secrets: await Promise.all(
         group.secrets.map(async (secret) => ({
@@ -32,27 +96,23 @@ secretRouter.get('/get-secrets', isLoggedIn, async (c) => {
           }),
         })),
       ),
-    }));
-
-    const response: ApiResponse = {
-      data: decryptedGroups,
-      message: 'Successfully fetched',
-      statusCode: 200,
-      success: true,
     };
 
-    return c.json(response, 200);
+    response.data = decryptedGroup;
+    response.message = 'Successfully fetched';
+    response.statusCode = 200;
+    response.success = true;
+    return c.json(response, response.statusCode);
   } catch (error) {
-    console.error('Failed to fetch secrets:', error);
-
+    console.error(error);
     const response: ApiResponse = {
       data: null,
-      message: 'Something went wrong!',
+      message: 'Internal server Error',
       statusCode: 500,
       success: false,
     };
 
-    return c.json(response, 500);
+    return c.json(response, response.statusCode);
   }
 });
 
@@ -69,8 +129,8 @@ secretRouter.post('/put-secrets', isLoggedIn, async (c) => {
         return {
           ...secret,
           groupId,
-          secret: encryptedValue.ciphertext,
-          iv: encryptedValue.iv,
+          secret: toB64(encryptedValue.ciphertext),
+          iv: toB64(encryptedValue.iv),
         };
       }),
     );
@@ -142,7 +202,7 @@ secretRouter.put('/update-secret/:id', isLoggedIn, async (c) => {
     const { ciphertext, iv } = await encryptSecret(value);
 
     const updated = await DB.update(Secrets)
-      .set({ iv: iv + '', secret: ciphertext + '', key })
+      .set({ iv: toB64(iv) + '', secret: toB64(ciphertext) + '', key })
       .where(eq(Secrets.id, id))
       .returning()
       .get();
@@ -197,6 +257,39 @@ secretRouter.post('/create-group', isLoggedIn, async (c) => {
   } catch (error) {
     console.log(error);
 
+    const response: ApiResponse = {};
+
+    response.data = null;
+    response.statusCode = 500;
+    response.success = false;
+    response.message = 'Internal Server Error!';
+
+    return c.json(response, response.statusCode);
+  }
+});
+
+secretRouter.delete('delete-secrets', isLoggedIn, async (c) => {
+  const DB = getDB(c.env);
+
+  try {
+    const { secrets } = await c.req.json();
+
+    await Promise.all(
+      secrets.map(
+        async (secret: number) =>
+          await DB.delete(Secrets).where(eq(Secrets.id, secret)),
+      ),
+    );
+
+    const response: ApiResponse = {};
+
+    response.data = null;
+    response.message = 'Successfully Deleted';
+    response.statusCode = 200;
+    response.success = true;
+    return c.json(response, response.statusCode);
+  } catch (error) {
+    console.log(error);
     const response: ApiResponse = {};
 
     response.data = null;

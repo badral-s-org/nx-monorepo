@@ -8,6 +8,7 @@ import type { Context } from 'hono';
 
 import {
   ACCESS_TOKEN_MAX_AGE,
+  generateRefreshToken,
   generateToken,
   isLoggedIn,
   REFRESH_TOKEN_MAX_AGE,
@@ -115,7 +116,7 @@ authRouter.post('/verify-otp', async (c) => {
 
     const ACCESS_TOKEN = generateToken(user);
 
-    const REFRESH_TOKEN = generateToken(user);
+    const REFRESH_TOKEN = generateRefreshToken(user);
 
     setCookie(c, 'access_token', ACCESS_TOKEN, {
       httpOnly: true,
