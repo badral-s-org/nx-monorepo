@@ -1,4 +1,4 @@
-import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
+import { getCookie, setCookie } from 'hono/cookie';
 import jwt from 'jsonwebtoken';
 import type { Context, Next } from 'hono';
 
