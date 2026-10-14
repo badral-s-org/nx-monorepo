@@ -51,7 +51,6 @@ export const AddSecretsDialog = () => {
   const [submitting, setSubmitting] = useState(false);
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [submitError, setSubmitError] = useState('');
-  const [submitSuccess, setSubmitSuccess] = useState('');
 
   const [toDeleteSecrets, setToDeleteSecrets] = useState<Set<number>>(
     new Set(),
@@ -110,7 +109,6 @@ export const AddSecretsDialog = () => {
     );
 
     setSubmitError('');
-    setSubmitSuccess('');
   };
 
   const addEntry = () => {
@@ -124,7 +122,6 @@ export const AddSecretsDialog = () => {
   const resetDialog = () => {
     setEntries([createEntry()]);
     setSubmitError('');
-    setSubmitSuccess('');
     setShowValues(false);
   };
 
