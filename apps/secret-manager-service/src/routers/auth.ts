@@ -122,14 +122,14 @@ authRouter.post('/verify-otp', async (c) => {
     setCookie(c, 'access_token', ACCESS_TOKEN, {
       httpOnly: true,
       secure: c.env.ENVIRONMENT === 'production',
-      sameSite: 'Lax',
+      sameSite: 'None',
       maxAge: ACCESS_TOKEN_MAX_AGE,
     });
 
     setCookie(c, 'refresh_token', REFRESH_TOKEN, {
       httpOnly: true,
       secure: c.env.ENVIRONMENT === 'production',
-      sameSite: 'Lax',
+      sameSite: 'None',
       maxAge: REFRESH_TOKEN_MAX_AGE,
     });
 

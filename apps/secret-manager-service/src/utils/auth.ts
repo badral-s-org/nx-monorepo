@@ -53,11 +53,11 @@ export const isLoggedIn = async (c: Context<AppEnv>, next: Next) => {
     statusCode: 401,
     success: false,
   };
-
+  console.log('hello1');
   if (!accessToken && !refreshToken) {
     return c.json(unauthorized, 401);
   }
-
+  console.log('hello2');
   if (accessToken) {
     try {
       const payload = jwt.verify(accessToken, getTokenSecret(), {
@@ -72,11 +72,12 @@ export const isLoggedIn = async (c: Context<AppEnv>, next: Next) => {
       }
     }
   }
-
+  console.log('hello3');
   if (!refreshToken) {
     return c.json(unauthorized, 401);
   }
 
+  console.log('hello4');
   try {
     const payload = jwt.verify(refreshToken, getTokenSecret(), {
       algorithms: ['HS256'],
