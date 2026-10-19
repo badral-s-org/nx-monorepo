@@ -1,6 +1,9 @@
 import { getCookie, setCookie } from 'hono/cookie';
 import jwt from 'jsonwebtoken';
+import { eq } from 'drizzle-orm';
 import type { Context, Next } from 'hono';
+import { getDB } from '../configs/drizzleProvider';
+import { SuperKeyActions, SuperKeys } from '../db';
 
 export const REFRESH_TOKEN_MAX_AGE = 60 * 60 * 24 * 30;
 export const ACCESS_TOKEN_MAX_AGE = 60 * 15;
@@ -97,4 +100,53 @@ export const isLoggedIn = async (c: Context<AppEnv>, next: Next) => {
 
     return c.json(unauthorized, 401);
   }
+};
+
+export const hashApiKey = async (apiKey: string): Promise<string> => {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(apiKey),
+  );
+
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+};
+
+// For other services: expects "Authorization: Bearer <api key>".
+// super_keys.key stores the SHA-256 hex hash of the api key, never the key itself.
+export const isServiceAuthorized = async (
+  c: Context<{ Bindings: Bindings }>,
+  next: Next,
+) => {
+  const unauthorized: ApiResponse = {
+    data: null,
+    message: 'Unauthorized',
+    statusCode: 401,
+    success: false,
+  };
+
+  const header = c.req.header('Authorization');
+
+  if (!header?.startsWith('Bearer ')) {
+    return c.json(unauthorized, 401);
+  }
+
+  const apiKey = header.slice('Bearer '.length).trim();
+
+  if (!apiKey) {
+    return c.json(unauthorized, 401);
+  }
+
+  const DB = getDB(c.env);
+
+  const superKey = await DB.query.SuperKeys.findFirst({
+    where: eq(SuperKeys.key, await hashApiKey(apiKey)),
+  });
+
+  if (!superKey || !superKey.accessActions.includes(SuperKeyActions.READ)) {
+    return c.json(unauthorized, 401);
+  }
+
+  return await next();
 };

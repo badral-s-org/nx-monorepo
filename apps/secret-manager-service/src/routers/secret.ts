@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { isLoggedIn } from '../utils/auth';
+import { isLoggedIn, isServiceAuthorized } from '../utils/auth';
 import { getDB } from '../configs/drizzleProvider';
 import { decryptSecret, encryptSecret, toB64 } from '../utils/encoder';
 import { Groups, Secrets, SecretType } from '../db';
@@ -99,6 +99,56 @@ secretRouter.get('/get-secrets/:id', isLoggedIn, async (c) => {
     };
 
     response.data = decryptedGroup;
+    response.message = 'Successfully fetched';
+    response.statusCode = 200;
+    response.success = true;
+    return c.json(response, response.statusCode);
+  } catch (error) {
+    console.error(error);
+    const response: ApiResponse = {
+      data: null,
+      message: 'Internal server Error',
+      statusCode: 500,
+      success: false,
+    };
+
+    return c.json(response, response.statusCode);
+  }
+});
+
+secretRouter.get('/env/:group', isServiceAuthorized, async (c) => {
+  const DB = getDB(c.env);
+
+  try {
+    const groupName = c.req.param('group') ?? '';
+
+    const group = await DB.query.Groups.findFirst({
+      where: eq(Groups.name, groupName),
+      with: {
+        secrets: true,
+      },
+    });
+
+    const response: ApiResponse = {};
+
+    if (!group) {
+      response.data = null;
+      response.message = 'Group not found';
+      response.statusCode = 404;
+      response.success = false;
+      return c.json(response, response.statusCode);
+    }
+
+    const env: Record<string, string> = {};
+
+    for (const secret of group.secrets) {
+      env[secret.key] = await decryptSecret({
+        iv: secret.iv,
+        secret: secret.secret,
+      });
+    }
+
+    response.data = env;
     response.message = 'Successfully fetched';
     response.statusCode = 200;
     response.success = true;

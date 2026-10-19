@@ -2,6 +2,7 @@
   "name": "secret-manager-service",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-14",
+  "compatibility_flags": ["nodejs_compat"],
   "vars": {
     "ENVIRONMENT": "development",
   },
@@ -10,6 +11,14 @@
       "vars": {
         "ENVIRONMENT": "production",
       },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "secret-manager",
+          "database_id": "ca466baa-a95e-4574-9629-822015d4d825",
+          "migrations_dir": "drizzle",
+        },
+      ],
     },
   },
   "d1_databases": [
