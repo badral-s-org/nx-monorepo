@@ -6,7 +6,10 @@ import { secretRouter } from './routers/secret';
 
 const app = new Hono<{ Bindings: Bindings }>().basePath('/api');
 
-const allowedOrigins = ['http://localhost:3000'];
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://nx-monorepo-secret-manager-web.vercel.app',
+];
 
 app.use('*', logger());
 app.use(
