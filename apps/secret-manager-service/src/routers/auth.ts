@@ -80,6 +80,7 @@ authRouter.post('/verify-otp', async (c) => {
 
     if (!user) {
       response.data = null;
+
       response.message = 'User not found';
       response.statusCode = 404;
       response.success = false;
