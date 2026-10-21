@@ -12,10 +12,16 @@ inputs:
     description: API key with READ access (stored hashed in super_keys)
     required: true
 
+outputs:
+  secrets-file:
+    description: Path to a JSON file with the loaded secrets (for `wrangler deploy --secrets-file`)
+    value: ${{ steps.load.outputs.secrets-file }}
+
 runs:
   using: composite
   steps:
-    - shell: bash
+    - id: load
+      shell: bash
       env:
         GROUP: ${{ inputs.group }}
         SERVICE_URL: ${{ inputs.service-url }}
@@ -44,5 +50,9 @@ runs:
         delimiter="EOF_$(openssl rand -hex 16)"
         echo "$res" | jq -r --arg d "$delimiter" \
           '.data | to_entries[] | "\(.key)<<\($d)\n\(.value)\n\($d)"' >> "$GITHUB_ENV"
+
+        secrets_file="$RUNNER_TEMP/secrets-$(openssl rand -hex 8).json"
+        (umask 077 && echo "$res" | jq '.data' > "$secrets_file")
+        echo "secrets-file=$secrets_file" >> "$GITHUB_OUTPUT"
 
         echo "Loaded $(echo "$res" | jq '.data | length') secret(s) from '$GROUP'"

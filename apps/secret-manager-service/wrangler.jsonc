@@ -9,7 +9,8 @@
   },
   // `wrangler deploy` uses this top level config, so it is the production config.
   // Local development overrides ENVIRONMENT through `--var` (see the serve targets).
-  // Secrets (TOKEN_SECRET, SUPER_KEY, RESEND_API_KEY) are set with `wrangler secret put`.
+  // Secrets come from the `secret-manager-service` secret group and are uploaded
+  // on deploy with `--secrets-file` (see secret-manager-service-ci-cd.yml).
   "vars": {
     "ENVIRONMENT": "production",
     "ALLOWED_ORIGINS": "https://nx-monorepo-secret-manager-web.vercel.app",
