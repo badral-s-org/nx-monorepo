@@ -63,6 +63,7 @@ app.onError((error, c) => {
   }
 
   console.error(`${c.req.method} ${c.req.path} failed:`, error);
+
   return fail(c, 'Internal server error', 500);
 });
 

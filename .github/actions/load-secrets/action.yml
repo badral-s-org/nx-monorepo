@@ -1,0 +1,48 @@
+name: Load secrets
+description: Fetches a secret group from secret-manager-service and exports every secret to the job env.
+
+inputs:
+  group:
+    description: Name of the secret group
+    required: true
+  service-url:
+    description: Base URL of secret-manager-service, including /api
+    required: true
+  api-key:
+    description: API key with READ access (stored hashed in super_keys)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GROUP: ${{ inputs.group }}
+        SERVICE_URL: ${{ inputs.service-url }}
+        API_KEY: ${{ inputs.api-key }}
+      run: |
+        set -euo pipefail
+
+        if [ -z "$SERVICE_URL" ] || [ -z "$API_KEY" ]; then
+          echo "::error::service-url and api-key must be set"
+          exit 1
+        fi
+
+        res=$(curl -sS --fail-with-body \
+          -H "Authorization: Bearer $API_KEY" \
+          "${SERVICE_URL%/}/secrets/env/$(jq -rn --arg g "$GROUP" '$g|@uri')") || {
+          echo "::error::Failed to load secret group '$GROUP': $res"
+          exit 1
+        }
+
+        # Mask every value (line by line, so multi-line values are covered too)
+        # before anything else can print it.
+        echo "$res" | jq -r '.data[]' | while IFS= read -r line; do
+          [ -n "$line" ] && echo "::add-mask::$line"
+        done
+
+        delimiter="EOF_$(openssl rand -hex 16)"
+        echo "$res" | jq -r --arg d "$delimiter" \
+          '.data | to_entries[] | "\(.key)<<\($d)\n\(.value)\n\($d)"' >> "$GITHUB_ENV"
+
+        echo "Loaded $(echo "$res" | jq '.data | length') secret(s) from '$GROUP'"
