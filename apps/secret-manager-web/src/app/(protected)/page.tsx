@@ -31,6 +31,7 @@ export default function Index() {
       setFetchingGroups(true);
 
       const response = await api.get('/secrets/get-secrets');
+
       const result = response.data;
 
       if (!result.success) {
