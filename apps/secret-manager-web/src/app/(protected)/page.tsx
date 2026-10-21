@@ -33,7 +33,6 @@ export default function Index() {
       const response = await api.get('/secrets/get-secrets');
 
       const result = response.data;
-
       if (!result.success) {
         throw new Error(result.message || 'Failed to fetch groups');
       }
