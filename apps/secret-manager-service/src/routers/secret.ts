@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { and, asc, eq, inArray, ne } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne, notExists } from 'drizzle-orm';
 import { z } from 'zod';
 import { isLoggedIn, isServiceAuthorized } from '../utils/auth';
 import { getDB } from '../configs/drizzleProvider';
@@ -245,6 +245,46 @@ secretRouter.post(
       .get();
 
     return ok(c, addedGroup, 'Successfully added');
+  },
+);
+
+// Only empty groups can be deleted, so secrets are never removed implicitly.
+secretRouter.delete(
+  '/delete-group/:id',
+  isLoggedIn,
+  validate('param', z.object({ id: idSchema })),
+  async (c) => {
+    const DB = getDB(c.env);
+    const { id } = c.req.valid('param');
+
+    // The emptiness check is part of the delete statement so a secret added
+    // concurrently can not be orphaned.
+    const deleted = await DB.delete(Groups)
+      .where(
+        and(
+          eq(Groups.id, id),
+          notExists(
+            DB.select({ id: Secrets.id })
+              .from(Secrets)
+              .where(eq(Secrets.groupId, id)),
+          ),
+        ),
+      )
+      .returning({ id: Groups.id });
+
+    if (deleted.length > 0) {
+      return ok(c, null, 'Successfully deleted group');
+    }
+
+    const group = await DB.query.Groups.findFirst({
+      where: eq(Groups.id, id),
+    });
+
+    if (!group) {
+      return fail(c, 'Group not found', 404);
+    }
+
+    return fail(c, 'Only groups without secrets can be deleted', 409);
   },
 );
 

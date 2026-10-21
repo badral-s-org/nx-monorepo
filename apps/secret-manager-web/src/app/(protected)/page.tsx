@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, Loader2, Folder, KeyRound } from 'lucide-react';
+import { Plus, Loader2, Folder, KeyRound, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button, Input, Label } from '@org/ui';
 import { api, getErrorMessage } from '../utils/axiosInstance';
@@ -24,6 +24,7 @@ export default function Index() {
   const [loading, setLoading] = useState(false);
   const [groups, setGroups] = useState<Group[]>([]);
   const [fetchingGroups, setFetchingGroups] = useState(true);
+  const [deletingGroupId, setDeletingGroupId] = useState<number | null>(null);
 
   const fetchGroups = useCallback(async () => {
     try {
@@ -50,6 +51,24 @@ export default function Index() {
   useEffect(() => {
     void fetchGroups();
   }, [fetchGroups]);
+
+  const deleteGroup = async (group: Group) => {
+    try {
+      setDeletingGroupId(group.id);
+
+      await api.delete(`/secrets/delete-group/${group.id}`);
+
+      toast.success(`Deleted ${group.name}`);
+      await fetchGroups();
+    } catch (error) {
+      showToaster({
+        type: 'error',
+        title: getErrorMessage(error, 'Failed to delete group'),
+      });
+    } finally {
+      setDeletingGroupId(null);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -202,6 +221,29 @@ export default function Index() {
                       </p>
                     </div>
                   </Link>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => void deleteGroup(group)}
+                    disabled={
+                      (group.secrets?.length ?? 0) > 0 ||
+                      deletingGroupId === group.id
+                    }
+                    title={
+                      (group.secrets?.length ?? 0) > 0
+                        ? 'Delete all secrets in this group first'
+                        : 'Delete group'
+                    }
+                    aria-label={`Delete ${group.name}`}
+                  >
+                    {deletingGroupId === group.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    )}
+                  </Button>
                 </div>
               ))}
             </div>

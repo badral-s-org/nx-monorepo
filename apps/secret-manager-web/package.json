@@ -5,7 +5,7 @@
   "scripts": {
     "test": "jest",
     "build": "next build",
-    "deploy": "vercel pull --yes --environment=production --cwd=../../ && vercel build --prod --cwd=../../ && vercel deploy --prebuilt --prod --cwd=../../",
+    "deploy": "cd ../.. && export VERCEL_ORG_ID=${VERCEL_ORG_ID:-team_Dz5r1loxhgsuL6ZW4PxGB9HZ} VERCEL_PROJECT_ID=${VERCEL_PROJECT_ID:-prj_fJcaTc5E19sApKnVAJIkXUXEviOw} && vercel pull --yes --environment=production && vercel build --prod && vercel deploy --prebuilt --prod",
     "vercel-build": "npx nx build secret-manager-web"
   },
   "dependencies": {
