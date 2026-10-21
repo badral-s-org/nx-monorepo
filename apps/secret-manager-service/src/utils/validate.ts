@@ -17,6 +17,7 @@ export const validate = <
 
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
+
       const path = issue?.path.join('.');
       return fail(
         c,
