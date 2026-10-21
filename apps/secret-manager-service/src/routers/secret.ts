@@ -255,10 +255,9 @@ secretRouter.delete(
   validate('param', z.object({ id: idSchema })),
   async (c) => {
     const DB = getDB(c.env);
+
     const { id } = c.req.valid('param');
 
-    // The emptiness check is part of the delete statement so a secret added
-    // concurrently can not be orphaned.
     const deleted = await DB.delete(Groups)
       .where(
         and(
