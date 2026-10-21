@@ -1,171 +1,157 @@
 import { Hono } from 'hono';
+import { eq, sql } from 'drizzle-orm';
+import { z } from 'zod';
 import { getDB } from '../configs/drizzleProvider';
 import { Users } from '../db';
-import { eq } from 'drizzle-orm';
 import { sendEmail } from '../utils/send-email';
-import { setCookie } from 'hono/cookie';
-import type { Context } from 'hono';
+import { sha256Hex } from '../utils/encoder';
+import { fail, ok } from '../utils/response';
+import { validate } from '../utils/validate';
+import type { AppEnv } from '../types';
 
 import {
-  ACCESS_TOKEN_MAX_AGE,
-  generateRefreshToken,
-  generateToken,
+  clearSessionCookies,
   isLoggedIn,
-  REFRESH_TOKEN_MAX_AGE,
+  setSessionCookies,
 } from '../utils/auth';
 
-export const authRouter = new Hono<{ Bindings: Bindings }>();
+const OTP_TTL_MS = 1000 * 60 * 5;
+const OTP_RESEND_COOLDOWN_MS = 1000 * 60;
+const OTP_MAX_ATTEMPTS = 5;
 
-authRouter.post('/send-otp', async (c) => {
-  const response: ApiResponse = {};
-  try {
+const emailSchema = z.string().trim().toLowerCase().email().max(254);
+
+const generateOtp = () => {
+  const [value] = crypto.getRandomValues(new Uint32Array(1));
+  return (value % 1_000_000).toString().padStart(6, '0');
+};
+
+const findUserByEmail = async (DB: ReturnType<typeof getDB>, email: string) => {
+  const [user] = await DB.select()
+    .from(Users)
+    .where(sql`lower(${Users.email}) = ${email}`);
+
+  return user;
+};
+
+export const authRouter = new Hono<AppEnv>();
+
+authRouter.post(
+  '/send-otp',
+  validate('json', z.object({ email: emailSchema })),
+  async (c) => {
     const DB = getDB(c.env);
+    const { email } = c.req.valid('json');
 
-    const { email } = await c.req.json();
-
-    const [user] = await DB.select().from(Users).where(eq(Users.email, email));
+    const user = await findUserByEmail(DB, email);
 
     if (!user) {
-      response.data = null;
-      response.message = 'User not found and Please ask admin about that.';
-      response.statusCode = 404;
-      response.success = false;
-      return c.json(response, 404);
+      return fail(c, 'User not found and Please ask admin about that.', 404);
     }
 
-    const otp = Math.floor(Math.random() * 900000 + 100000);
+    const now = Date.now();
+
+    if (
+      user.otpExpiration &&
+      user.otpExpiration - OTP_TTL_MS + OTP_RESEND_COOLDOWN_MS > now
+    ) {
+      return fail(
+        c,
+        'An OTP code was sent recently. Please wait a minute before requesting a new one.',
+        429,
+      );
+    }
+
+    const otp = generateOtp();
 
     await DB.update(Users)
       .set({
-        otpCode: otp.toString(),
-        otpExpiration: Date.now() + 1000 * 120,
+        otpCode: await sha256Hex(otp),
+        otpExpiration: now + OTP_TTL_MS,
+        otpAttempts: 0,
       })
       .where(eq(Users.id, user.id));
 
-    await sendEmail({
-      to: email,
-      content: `<p>OTP Code <b>${otp}</b></p>`,
-      subject: 'SECRET_MANAGER_WEB OTP code',
-    });
+    try {
+      await sendEmail(c.env, {
+        to: user.email,
+        content: `<p>Your Secret Manager OTP code is <b>${otp}</b>. It expires in 5 minutes.</p>`,
+        subject: 'Secret Manager OTP code',
+      });
+    } catch (error) {
+      // Release the code so the cooldown does not block a retry.
+      await DB.update(Users)
+        .set({ otpCode: null, otpExpiration: null })
+        .where(eq(Users.id, user.id));
+      throw error;
+    }
 
-    response.success = true;
-    response.data = null;
-    response.message =
-      'OTP Code is sent successfully. Please check your email.';
-    response.statusCode = 200;
-
-    return c.json(response, response.statusCode);
-  } catch (error) {
-    return c.json(
-      {
-        success: false,
-        data: null,
-        message: 'Internal server error.',
-        statusCode: 500,
-      },
-      500,
+    return ok(
+      c,
+      null,
+      'OTP Code is sent successfully. Please check your email.',
     );
-  }
-});
+  },
+);
 
-authRouter.post('/verify-otp', async (c) => {
-  const response: ApiResponse = {};
-
-  try {
+authRouter.post(
+  '/verify-otp',
+  validate(
+    'json',
+    z.object({
+      email: emailSchema,
+      otp: z.string().regex(/^\d{6}$/, 'OTP must be 6 digits'),
+    }),
+  ),
+  async (c) => {
     const DB = getDB(c.env);
+    const { email, otp } = c.req.valid('json');
 
-    const { email, otp } = await c.req.json();
+    const user = await findUserByEmail(DB, email);
 
-    const [user] = await DB.select().from(Users).where(eq(Users.email, email));
-
-    if (!user) {
-      response.data = null;
-
-      response.message = 'User not found';
-      response.statusCode = 404;
-      response.success = false;
-      return c.json(response, response.statusCode);
+    if (
+      !user ||
+      !user.otpCode ||
+      !user.otpExpiration ||
+      user.otpExpiration < Date.now()
+    ) {
+      return fail(c, 'OTP is invalid or has expired', 400);
     }
 
-    if (!user.otpCode) {
-      response.data = null;
-      response.message = 'There is no otp sent';
-      response.statusCode = 404;
-      response.success = false;
-      return c.json(response, response.statusCode);
+    if (user.otpAttempts >= OTP_MAX_ATTEMPTS) {
+      await DB.update(Users)
+        .set({ otpCode: null, otpExpiration: null, otpAttempts: 0 })
+        .where(eq(Users.id, user.id));
+
+      return fail(c, 'Too many attempts. Please request a new OTP code.', 429);
     }
 
-    if (!user.otpExpiration || user.otpExpiration < Date.now()) {
-      response.data = null;
-      response.message = 'OTP has expired';
-      response.statusCode = 400;
-      response.success = false;
-      return c.json(response, response.statusCode);
+    if (user.otpCode !== (await sha256Hex(otp))) {
+      await DB.update(Users)
+        .set({ otpAttempts: sql`${Users.otpAttempts} + 1` })
+        .where(eq(Users.id, user.id));
+
+      return fail(c, 'OTP is wrong', 400);
     }
 
-    if (user.otpCode !== otp) {
-      response.data = null;
-      response.message = 'OTP is wrong';
-      response.statusCode = 400;
-      response.success = false;
-      return c.json(response, response.statusCode);
-    }
-
+    // One time use: clear the code so it can not be replayed.
     await DB.update(Users)
-      .set({ otpExpiration: null })
-      .where(eq(Users.email, email));
+      .set({ otpCode: null, otpExpiration: null, otpAttempts: 0 })
+      .where(eq(Users.id, user.id));
 
-    const ACCESS_TOKEN = generateToken(user);
+    const sessionUser = { id: user.id, email: user.email };
 
-    const REFRESH_TOKEN = generateRefreshToken(user);
+    await setSessionCookies(c, sessionUser);
 
-    setCookie(c, 'access_token', ACCESS_TOKEN, {
-      httpOnly: true,
-      secure: c.env.ENVIRONMENT === 'production',
-      sameSite: 'None',
-      maxAge: ACCESS_TOKEN_MAX_AGE,
-    });
+    return ok(c, sessionUser, 'Successfully signed in');
+  },
+);
 
-    setCookie(c, 'refresh_token', REFRESH_TOKEN, {
-      httpOnly: true,
-      secure: c.env.ENVIRONMENT === 'production',
-      sameSite: 'None',
-      maxAge: REFRESH_TOKEN_MAX_AGE,
-    });
-
-    response.data = { id: user.id, email: user.email };
-    response.message = 'Successfully signed in';
-
-    response.statusCode = 200;
-    response.success = true;
-
-    return c.json(response, response.statusCode);
-  } catch (error) {
-    console.log(error);
-    return c.json(
-      {
-        success: false,
-        data: null,
-        message: 'Internal server error',
-        statusCode: 500,
-      },
-      500,
-    );
-  }
+authRouter.post('/logout', (c) => {
+  clearSessionCookies(c);
+  return ok(c, null, 'Successfully signed out');
 });
 
-authRouter.get('/session', isLoggedIn, async (c: Context<AppEnv>) => {
-  const response: ApiResponse = {};
-
-  const user = c.get('user');
-
-  response.data = user;
-
-  response.message = 'Successfully fetched';
-
-  response.statusCode = 200;
-
-  response.success = true;
-
-  return c.json(response, response.statusCode);
+authRouter.get('/session', isLoggedIn, (c) => {
+  return ok(c, c.get('user'), 'Successfully fetched');
 });

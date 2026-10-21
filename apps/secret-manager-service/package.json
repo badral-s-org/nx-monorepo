@@ -28,80 +28,35 @@
         }
       },
       "build": {
-        "executor": "@nx/esbuild:esbuild",
-        "outputs": [
-          "{options.outputPath}"
-        ],
-        "defaultConfiguration": "production",
-        "options": {
-          "platform": "node",
-          "outputPath": "apps/secret-manager-service/dist",
-          "format": [
-            "cjs"
-          ],
-          "bundle": false,
-          "main": "apps/secret-manager-service/src/index.ts",
-          "tsConfig": "apps/secret-manager-service/tsconfig.app.json",
-          "assets": [
-            "apps/secret-manager-service/src/assets"
-          ],
-          "esbuildOptions": {
-            "sourcemap": true,
-            "outExtension": {
-              ".js": ".js"
-            }
-          }
-        },
-        "configurations": {
-          "development": {},
-          "production": {
-            "esbuildOptions": {
-              "sourcemap": false,
-              "outExtension": {
-                ".js": ".js"
-              }
-            }
-          }
-        }
-      },
-      "prune-lockfile": {
-        "dependsOn": [
-          "build"
-        ],
+        "executor": "nx:run-commands",
         "cache": true,
-        "executor": "@nx/js:prune-lockfile",
-        "outputs": [
-          "{workspaceRoot}/apps/secret-manager-service/dist/package.json",
-          "{workspaceRoot}/apps/secret-manager-service/dist/package-lock.json"
-        ],
+        "inputs": ["production", "^production"],
+        "outputs": ["{projectRoot}/dist"],
         "options": {
-          "buildTarget": "build"
+          "cwd": "apps/secret-manager-service",
+          "command": "npx wrangler deploy --dry-run --outdir dist"
         }
       },
-      "copy-workspace-modules": {
-        "dependsOn": [
-          "build"
-        ],
-        "cache": true,
-        "outputs": [
-          "{workspaceRoot}/apps/secret-manager-service/dist/workspace_modules"
-        ],
-        "executor": "@nx/js:copy-workspace-modules",
+      "deploy": {
+        "executor": "nx:run-commands",
+        "dependsOn": ["typecheck"],
         "options": {
-          "buildTarget": "build"
+          "cwd": "apps/secret-manager-service",
+          "command": "npx wrangler deploy"
         }
-      },
-      "prune": {
-        "dependsOn": [
-          "prune-lockfile",
-          "copy-workspace-modules"
-        ],
-        "executor": "nx:noop"
       },
       "serve": {
         "executor": "nx:run-commands",
         "options": {
-          "command": "npx wrangler dev apps/secret-manager-service/src/index.ts --remote"
+          "cwd": "apps/secret-manager-service",
+          "command": "npx wrangler dev --var ENVIRONMENT:development"
+        }
+      },
+      "serve-remote": {
+        "executor": "nx:run-commands",
+        "options": {
+          "cwd": "apps/secret-manager-service",
+          "command": "npx wrangler dev --remote --var ENVIRONMENT:development"
         }
       }
     }

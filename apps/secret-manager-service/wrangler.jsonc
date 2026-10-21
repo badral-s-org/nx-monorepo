@@ -1,25 +1,19 @@
 {
+  "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "secret-manager-service",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-14",
   "compatibility_flags": ["nodejs_compat"],
-  "vars": {
-    "ENVIRONMENT": "development",
+  "observability": {
+    "enabled": true,
   },
-  "env": {
-    "production": {
-      "vars": {
-        "ENVIRONMENT": "production",
-      },
-      "d1_databases": [
-        {
-          "binding": "DB",
-          "database_name": "secret-manager",
-          "database_id": "ca466baa-a95e-4574-9629-822015d4d825",
-          "migrations_dir": "drizzle",
-        },
-      ],
-    },
+  // `wrangler deploy` uses this top level config, so it is the production config.
+  // Local development overrides ENVIRONMENT through `--var` (see the serve targets).
+  // Secrets (TOKEN_SECRET, SUPER_KEY, RESEND_API_KEY) are set with `wrangler secret put`.
+  "vars": {
+    "ENVIRONMENT": "production",
+    "ALLOWED_ORIGINS": "https://nx-monorepo-secret-manager-web.vercel.app",
+    "EMAIL_FROM": "noreply@expense.tiim.mn",
   },
   "d1_databases": [
     {
@@ -27,7 +21,6 @@
       "database_name": "secret-manager",
       "database_id": "ca466baa-a95e-4574-9629-822015d4d825",
       "migrations_dir": "drizzle",
-      // "migrations_pattern": "drizzle/*/migration.sql",
     },
   ],
 }

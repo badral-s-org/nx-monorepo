@@ -2,8 +2,7 @@
 import { Button, InputOTP, InputOTPGroup, InputOTPSlot } from '@org/ui';
 import * as yup from 'yup';
 import { Formik, Form, ErrorMessage } from 'formik';
-import { api } from '../../utils/axiosInstance';
-import axios from 'axios';
+import { api, getErrorMessage } from '../../utils/axiosInstance';
 import { showToaster } from '../../utils/toasters';
 
 export const Step2 = ({ email }: { email: string }) => {
@@ -29,13 +28,10 @@ export const Step2 = ({ email }: { email: string }) => {
         window.location.href = '/';
       }
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const errorResponse = error.response;
-        showToaster({
-          type: 'error',
-          title: errorResponse?.data.message,
-        });
-      }
+      showToaster({
+        type: 'error',
+        title: getErrorMessage(error, 'Failed to verify OTP code'),
+      });
     }
   };
 
@@ -43,15 +39,15 @@ export const Step2 = ({ email }: { email: string }) => {
     <Formik
       initialValues={{ otp: '' }}
       validationSchema={otpSchema}
-      onSubmit={(values) => {
-        verifyOtp(values.otp);
-      }}
+      onSubmit={(values) => verifyOtp(values.otp)}
     >
-      {({ errors, touched, isValid, dirty, values, setFieldValue }) => {
+      {({ isSubmitting, values, setFieldValue }) => {
         return (
           <Form className="space-y-4">
             <div className="space-y-2">
-              <p className="text-xl text-center">Enter recieved OTP code</p>
+              <p className="text-xl text-center">
+                Enter the OTP code sent to {email}
+              </p>
               <InputOTP
                 className="w-full"
                 name="otp"
@@ -76,11 +72,11 @@ export const Step2 = ({ email }: { email: string }) => {
             </div>
 
             <Button
-              disabled={values.otp.length !== 6}
+              disabled={values.otp.length !== 6 || isSubmitting}
               type="submit"
               className="w-full py-4"
             >
-              Login
+              {isSubmitting ? 'Verifying...' : 'Login'}
             </Button>
           </Form>
         );

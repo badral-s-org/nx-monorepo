@@ -11,15 +11,14 @@ import {
 import { Dispatch, SetStateAction, useState } from 'react';
 import { Secret } from '../types';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
-import { api } from '../../../utils/axiosInstance';
+import { api, getErrorMessage } from '../../../utils/axiosInstance';
 import { showToaster } from '../../../utils/toasters';
-import axios from 'axios';
 
 type EditSecretDialogProps = {
   open: boolean;
   setOpen: Dispatch<SetStateAction<boolean>>;
   secret: Secret;
-  refetch: () => void;
+  refetch: () => Promise<void>;
 };
 
 export const EditSecretDialog = ({
@@ -41,20 +40,19 @@ export const EditSecretDialog = ({
     try {
       setSubmitting(true);
       await api.put(`/secrets/update-secret/${secret.id}`, {
-        ...newSecret,
+        key: newSecret.key.trim(),
+        value: newSecret.value,
       });
       showToaster({ type: 'success', title: 'Successfully updated' });
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        showToaster({
-          type: 'error',
-          title: error.response?.data?.message || 'Failed to fetch groups',
-        });
-      }
-    } finally {
-      refetch();
-      setSubmitting(false);
       setOpen(false);
+      await refetch();
+    } catch (error) {
+      showToaster({
+        type: 'error',
+        title: getErrorMessage(error, 'Failed to update secret'),
+      });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -66,7 +64,7 @@ export const EditSecretDialog = ({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>update secret</DialogTitle>
+          <DialogTitle>Update secret</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -77,7 +75,7 @@ export const EditSecretDialog = ({
                 <Input
                   id={`key-${secret.id}`}
                   placeholder="e.g. DATABASE_URL"
-                  value={secret.key}
+                  value={newSecret.key}
                   onChange={(event) => updateSecret('key', event.target.value)}
                   required
                 />

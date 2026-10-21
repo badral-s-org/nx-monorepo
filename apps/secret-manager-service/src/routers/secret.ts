@@ -1,126 +1,97 @@
 import { Hono } from 'hono';
+import { and, asc, eq, inArray, ne } from 'drizzle-orm';
+import { z } from 'zod';
 import { isLoggedIn, isServiceAuthorized } from '../utils/auth';
 import { getDB } from '../configs/drizzleProvider';
-import { decryptSecret, encryptSecret, toB64 } from '../utils/encoder';
+import { decryptSecret, encryptSecret } from '../utils/encoder';
 import { Groups, Secrets, SecretType } from '../db';
-import { eq } from 'drizzle-orm';
+import { fail, ok } from '../utils/response';
+import { validate } from '../utils/validate';
+import type { AppEnv } from '../types';
 
-export const secretRouter = new Hono<{ Bindings: Bindings }>();
+const MAX_SECRETS_PER_REQUEST = 50;
 
+const idSchema = z.coerce.number().int().positive();
+const keySchema = z
+  .string()
+  .trim()
+  .min(1, 'Key is required')
+  .max(256)
+  .regex(/^[A-Za-z0-9_.-]+$/, 'Key may only contain letters, digits, _ . -');
+const valueSchema = z
+  .string()
+  .min(1, 'Value is required')
+  .max(64 * 1024);
+
+const decryptSecrets = (superKey: string, secrets: SecretType[]) =>
+  Promise.all(
+    secrets.map(async (secret) => ({
+      id: secret.id,
+      groupId: secret.groupId,
+      createdAt: secret.createdAt,
+      updatedAt: secret.updatedAt,
+      key: secret.key,
+      secret: await decryptSecret(superKey, secret),
+    })),
+  );
+
+export const secretRouter = new Hono<AppEnv>();
+
+// Lists groups with their secret keys only. Values are returned by the single
+// group endpoint so the overview never ships every secret to the browser.
 secretRouter.get('/get-secrets', isLoggedIn, async (c) => {
   const DB = getDB(c.env);
 
-  try {
-    const groups = await DB.query.Groups.findMany({
-      with: {
-        secrets: true,
+  const groups = await DB.query.Groups.findMany({
+    orderBy: asc(Groups.name),
+    with: {
+      secrets: {
+        columns: { id: true, key: true, createdAt: true, updatedAt: true },
+        orderBy: asc(Secrets.key),
       },
-    });
+    },
+  });
 
-    const decryptedGroups = await Promise.all(
-      groups.map(async (group) => ({
-        ...group,
-        secrets: await Promise.all(
-          group.secrets.map(async (secret) => ({
-            id: secret.id,
-            groupId: secret.groupId,
-            createdAt: secret.createdAt,
-            updatedAt: secret.updatedAt,
-            key: secret.key,
-            secret: await decryptSecret({
-              iv: secret.iv,
-              secret: secret.secret,
-            }),
-          })),
-        ),
-      })),
-    );
-
-    const response: ApiResponse = {
-      data: decryptedGroups,
-      message: 'Successfully fetched',
-      statusCode: 200,
-      success: true,
-    };
-
-    return c.json(response, 200);
-  } catch (error) {
-    console.error('Failed to fetch secrets:', error && (error as Error).cause);
-
-    const response: ApiResponse = {
-      data: null,
-      message: 'Something went wrong!',
-      statusCode: 500,
-      success: false,
-    };
-
-    return c.json(response, 500);
-  }
+  return ok(c, groups, 'Successfully fetched');
 });
 
-secretRouter.get('/get-secrets/:id', isLoggedIn, async (c) => {
-  const DB = getDB(c.env);
-
-  try {
-    const groupId = c.req.param('id') ? Number(c.req.param('id')) : 0;
+secretRouter.get(
+  '/get-secrets/:id',
+  isLoggedIn,
+  validate('param', z.object({ id: idSchema })),
+  async (c) => {
+    const DB = getDB(c.env);
+    const { id } = c.req.valid('param');
 
     const group = await DB.query.Groups.findFirst({
-      where: eq(Groups.id, groupId),
+      where: eq(Groups.id, id),
       with: {
-        secrets: true,
+        secrets: { orderBy: asc(Secrets.key) },
       },
     });
 
-    const response: ApiResponse = {};
-
     if (!group) {
-      response.data = null;
-      response.message = 'Group not found';
-      response.statusCode = 404;
-      response.success = false;
-      return c.json(response, response.statusCode);
+      return fail(c, 'Group not found', 404);
     }
 
-    const decryptedGroup = {
-      ...group,
-      secrets: await Promise.all(
-        group.secrets.map(async (secret) => ({
-          id: secret.id,
-          groupId: secret.groupId,
-          createdAt: secret.createdAt,
-          updatedAt: secret.updatedAt,
-          key: secret.key,
-          secret: await decryptSecret({
-            iv: secret.iv,
-            secret: secret.secret,
-          }),
-        })),
-      ),
-    };
+    return ok(
+      c,
+      {
+        ...group,
+        secrets: await decryptSecrets(c.env.SUPER_KEY, group.secrets),
+      },
+      'Successfully fetched',
+    );
+  },
+);
 
-    response.data = decryptedGroup;
-    response.message = 'Successfully fetched';
-    response.statusCode = 200;
-    response.success = true;
-    return c.json(response, response.statusCode);
-  } catch (error) {
-    console.error(error);
-    const response: ApiResponse = {
-      data: null,
-      message: 'Internal server Error',
-      statusCode: 500,
-      success: false,
-    };
-
-    return c.json(response, response.statusCode);
-  }
-});
-
-secretRouter.get('/env/:group', isServiceAuthorized, async (c) => {
-  const DB = getDB(c.env);
-
-  try {
-    const groupName = c.req.param('group') ?? '';
+secretRouter.get(
+  '/env/:group',
+  isServiceAuthorized,
+  validate('param', z.object({ group: z.string().min(1).max(100) })),
+  async (c) => {
+    const DB = getDB(c.env);
+    const { group: groupName } = c.req.valid('param');
 
     const group = await DB.query.Groups.findFirst({
       where: eq(Groups.name, groupName),
@@ -129,168 +100,143 @@ secretRouter.get('/env/:group', isServiceAuthorized, async (c) => {
       },
     });
 
-    const response: ApiResponse = {};
-
     if (!group) {
-      response.data = null;
-      response.message = 'Group not found';
-      response.statusCode = 404;
-      response.success = false;
-      return c.json(response, response.statusCode);
+      return fail(c, 'Group not found', 404);
     }
 
     const env: Record<string, string> = {};
 
     for (const secret of group.secrets) {
-      env[secret.key] = await decryptSecret({
-        iv: secret.iv,
-        secret: secret.secret,
-      });
+      env[secret.key] = await decryptSecret(c.env.SUPER_KEY, secret);
     }
 
-    response.data = env;
-    response.message = 'Successfully fetched';
-    response.statusCode = 200;
-    response.success = true;
-    return c.json(response, response.statusCode);
-  } catch (error) {
-    console.error(error);
-    const response: ApiResponse = {
-      data: null,
-      message: 'Internal server Error',
-      statusCode: 500,
-      success: false,
-    };
+    return ok(c, env, 'Successfully fetched');
+  },
+);
 
-    return c.json(response, response.statusCode);
-  }
-});
-
-secretRouter.post('/put-secrets', isLoggedIn, async (c) => {
-  try {
+secretRouter.post(
+  '/put-secrets',
+  isLoggedIn,
+  validate(
+    'json',
+    z.object({
+      groupId: idSchema,
+      secrets: z
+        .array(z.object({ key: keySchema, secret: valueSchema }))
+        .min(1, 'At least one secret is required')
+        .max(MAX_SECRETS_PER_REQUEST),
+    }),
+  ),
+  async (c) => {
     const DB = getDB(c.env);
+    const { groupId, secrets } = c.req.valid('json');
 
-    const { groupId, secrets } = await c.req.json();
+    const keys = secrets.map((secret) => secret.key);
 
-    const encryptedSecrets = await Promise.all(
-      secrets.map(async (secret: SecretType) => {
-        const encryptedValue = await encryptSecret(secret.secret);
-
-        return {
-          ...secret,
-          groupId,
-          secret: toB64(encryptedValue.ciphertext),
-          iv: toB64(encryptedValue.iv),
-        };
-      }),
-    );
+    if (new Set(keys).size !== keys.length) {
+      return fail(c, 'Secret keys must be unique', 400);
+    }
 
     const [group] = await DB.select()
       .from(Groups)
       .where(eq(Groups.id, groupId));
 
     if (!group) {
-      return c.json(
-        {
-          data: null,
-          success: false,
-          message: 'Group not found!',
-        },
-        404,
+      return fail(c, 'Group not found!', 404);
+    }
+
+    const existing = await DB.select({ key: Secrets.key })
+      .from(Secrets)
+      .where(and(eq(Secrets.groupId, groupId), inArray(Secrets.key, keys)));
+
+    if (existing.length > 0) {
+      return fail(
+        c,
+        `Secret already exists: ${existing.map((secret) => secret.key).join(', ')}`,
+        409,
       );
     }
 
-    await Promise.all(
-      encryptedSecrets.map((secret) =>
-        DB.insert(Secrets).values({ ...secret }),
-      ),
+    const values = await Promise.all(
+      secrets.map(async (secret) => ({
+        groupId,
+        key: secret.key,
+        ...(await encryptSecret(c.env.SUPER_KEY, secret.secret)),
+      })),
     );
 
-    return c.json(
-      {
-        data: null,
-        message: 'Successfully put secrets',
-        success: true,
-      },
-      200,
-    );
-  } catch (error) {
-    console.log(error);
+    // A single statement, so either all secrets are stored or none are.
+    await DB.insert(Secrets).values(values);
 
-    return c.json(
-      {
-        data: null,
-        message: 'Internal Server Error!',
-        success: false,
-      },
-      500,
-    );
-  }
-});
+    return ok(c, null, 'Successfully put secrets');
+  },
+);
 
-secretRouter.put('/update-secret/:id', isLoggedIn, async (c) => {
-  const DB = getDB(c.env);
-  const id = c.req.param('id') ? Number(c.req.param('id')) : 0;
+secretRouter.put(
+  '/update-secret/:id',
+  isLoggedIn,
+  validate('param', z.object({ id: idSchema })),
+  validate('json', z.object({ key: keySchema, value: valueSchema })),
+  async (c) => {
+    const DB = getDB(c.env);
+    const { id } = c.req.valid('param');
+    const { key, value } = c.req.valid('json');
 
-  const { value, key } = await c.req.json();
-  try {
     const secret = await DB.query.Secrets.findFirst({
       where: eq(Secrets.id, id),
     });
 
-    const response: ApiResponse = {};
-
     if (!secret) {
-      response.data = null;
-      response.message = 'secret not found';
-      response.statusCode = 404;
-      response.success = false;
-
-      return c.json(response, response.statusCode);
+      return fail(c, 'secret not found', 404);
     }
 
-    const { ciphertext, iv } = await encryptSecret(value);
+    const conflict = await DB.query.Secrets.findFirst({
+      where: and(
+        eq(Secrets.groupId, secret.groupId),
+        eq(Secrets.key, key),
+        ne(Secrets.id, id),
+      ),
+    });
+
+    if (conflict) {
+      return fail(c, `Secret already exists: ${key}`, 409);
+    }
 
     const updated = await DB.update(Secrets)
-      .set({ iv: toB64(iv) + '', secret: toB64(ciphertext) + '', key })
+      .set({ key, ...(await encryptSecret(c.env.SUPER_KEY, value)) })
       .where(eq(Secrets.id, id))
-      .returning()
+      .returning({
+        id: Secrets.id,
+        groupId: Secrets.groupId,
+        key: Secrets.key,
+        createdAt: Secrets.createdAt,
+        updatedAt: Secrets.updatedAt,
+      })
       .get();
 
-    response.data = updated;
-    response.message = 'Successfully updated';
-    response.statusCode = 200;
-    response.success = true;
-    return c.json(response, response.statusCode);
-  } catch (error) {
-    console.log(error);
-    const response: ApiResponse = {};
-    response.data = null;
-    response.message = 'Interval Server Error !';
-    response.statusCode = 500;
-    response.success = false;
-    return c.json(response, response.statusCode);
-  }
-});
+    return ok(c, updated, 'Successfully updated');
+  },
+);
 
-secretRouter.post('/create-group', isLoggedIn, async (c) => {
-  const DB = getDB(c.env);
-
-  try {
-    const { groupName } = await c.req.json();
-
-    const response: ApiResponse = {};
+secretRouter.post(
+  '/create-group',
+  isLoggedIn,
+  validate(
+    'json',
+    z.object({
+      groupName: z.string().trim().min(1, 'Group name is required').max(100),
+    }),
+  ),
+  async (c) => {
+    const DB = getDB(c.env);
+    const { groupName } = c.req.valid('json');
 
     const group = await DB.query.Groups.findFirst({
       where: eq(Groups.name, groupName),
     });
 
     if (group) {
-      response.data = null;
-      response.message = 'Group already exists';
-      response.statusCode = 409;
-      response.success = false;
-      return c.json(response, response.statusCode);
+      return fail(c, 'Group already exists', 409);
     }
 
     const addedGroup = await DB.insert(Groups)
@@ -298,55 +244,25 @@ secretRouter.post('/create-group', isLoggedIn, async (c) => {
       .returning()
       .get();
 
-    response.data = addedGroup;
-    response.message = 'Successfully added';
-    response.success = true;
-    response.statusCode = 200;
+    return ok(c, addedGroup, 'Successfully added');
+  },
+);
 
-    return c.json(response, response.statusCode);
-  } catch (error) {
-    console.log(error);
+secretRouter.delete(
+  '/delete-secrets',
+  isLoggedIn,
+  validate(
+    'json',
+    z.object({
+      secrets: z.array(idSchema).min(1).max(MAX_SECRETS_PER_REQUEST),
+    }),
+  ),
+  async (c) => {
+    const DB = getDB(c.env);
+    const { secrets } = c.req.valid('json');
 
-    const response: ApiResponse = {};
+    await DB.delete(Secrets).where(inArray(Secrets.id, secrets));
 
-    response.data = null;
-    response.statusCode = 500;
-    response.success = false;
-    response.message = 'Internal Server Error!';
-
-    return c.json(response, response.statusCode);
-  }
-});
-
-secretRouter.delete('delete-secrets', isLoggedIn, async (c) => {
-  const DB = getDB(c.env);
-
-  try {
-    const { secrets } = await c.req.json();
-
-    await Promise.all(
-      secrets.map(
-        async (secret: number) =>
-          await DB.delete(Secrets).where(eq(Secrets.id, secret)),
-      ),
-    );
-
-    const response: ApiResponse = {};
-
-    response.data = null;
-    response.message = 'Successfully Deleted';
-    response.statusCode = 200;
-    response.success = true;
-    return c.json(response, response.statusCode);
-  } catch (error) {
-    console.log(error);
-    const response: ApiResponse = {};
-
-    response.data = null;
-    response.statusCode = 500;
-    response.success = false;
-    response.message = 'Internal Server Error!';
-
-    return c.json(response, response.statusCode);
-  }
-});
+    return ok(c, null, 'Successfully Deleted');
+  },
+);

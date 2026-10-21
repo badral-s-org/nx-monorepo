@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Plus, Trash2, Eye, EyeOff, Loader2, Edit } from 'lucide-react';
+import { Plus, Trash2, Eye, EyeOff, Loader2, Edit, Copy } from 'lucide-react';
 
 import {
   Button,
@@ -17,10 +17,9 @@ import {
   Input,
   Label,
 } from '@org/ui';
-import { api } from '../../../utils/axiosInstance';
+import { api, getErrorMessage } from '../../../utils/axiosInstance';
 import { Secret, SecretGroup } from '../types';
 import { EditSecretDialog } from './EditSecretDialog';
-import axios from 'axios';
 import { showToaster } from '../../../utils/toasters';
 
 interface SecretEntry {
@@ -55,10 +54,13 @@ export const AddSecretsDialog = () => {
   const [toDeleteSecrets, setToDeleteSecrets] = useState<Set<number>>(
     new Set(),
   );
+  const [deleting, setDeleting] = useState(false);
+  const [revealedSecrets, setRevealedSecrets] = useState<Set<number>>(
+    new Set(),
+  );
 
-  const fetchGroup = async () => {
+  const fetchGroup = useCallback(async () => {
     try {
-      setLoading(true);
       setError('');
 
       const response = await api.get(`/secrets/get-secrets/${groupId}`);
@@ -70,12 +72,14 @@ export const AddSecretsDialog = () => {
       }
 
       setGroup(group);
-    } catch {
-      setError('Failed to load secrets. Please try again.');
+    } catch (error) {
+      setError(
+        getErrorMessage(error, 'Failed to load secrets. Please try again.'),
+      );
     } finally {
       setLoading(false);
     }
-  };
+  }, [groupId]);
 
   useEffect(() => {
     if (!groupId) {
@@ -85,7 +89,7 @@ export const AddSecretsDialog = () => {
     }
 
     void fetchGroup();
-  }, [groupId]);
+  }, [groupId, fetchGroup]);
 
   const normalizedKeys = entries.map((entry) => entry.key.trim().toLowerCase());
 
@@ -176,18 +180,15 @@ export const AddSecretsDialog = () => {
         })),
       });
 
-      const response = await api.get('/secrets/get-secrets');
-      const groups: SecretGroup[] = response.data.data;
-      const updatedGroup = groups.find((item) => item.id === group.id);
+      await fetchGroup();
 
-      if (updatedGroup) {
-        setGroup(updatedGroup);
-      }
-
+      showToaster({ type: 'success', title: 'Successfully added' });
       setDialogOpen(false);
       resetDialog();
-    } catch {
-      setSubmitError('Failed to add secrets. Please try again.');
+    } catch (error) {
+      setSubmitError(
+        getErrorMessage(error, 'Failed to add secrets. Please try again.'),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -207,19 +208,39 @@ export const AddSecretsDialog = () => {
 
   if (!group) return null;
 
-  const handleToDeleteSecrets = (secret: Secret) => {
-    const newSet = new Set([...toDeleteSecrets]);
+  const toggleInSet = (set: Set<number>, id: number) => {
+    const newSet = new Set(set);
 
-    if (toDeleteSecrets.has(secret.id)) {
-      newSet.delete(secret.id);
+    if (newSet.has(id)) {
+      newSet.delete(id);
     } else {
-      newSet.add(secret.id);
+      newSet.add(id);
     }
-    setToDeleteSecrets(newSet);
+
+    return newSet;
+  };
+
+  const handleToDeleteSecrets = (secret: Secret) => {
+    setToDeleteSecrets((current) => toggleInSet(current, secret.id));
+  };
+
+  const toggleReveal = (secret: Secret) => {
+    setRevealedSecrets((current) => toggleInSet(current, secret.id));
+  };
+
+  const copySecret = async (secret: Secret) => {
+    try {
+      await navigator.clipboard.writeText(secret.secret);
+      showToaster({ type: 'success', title: `Copied ${secret.key}` });
+    } catch {
+      showToaster({ type: 'error', title: 'Failed to copy to clipboard' });
+    }
   };
 
   const deleteSecrets = async () => {
     try {
+      setDeleting(true);
+
       await api.delete('/secrets/delete-secrets', {
         data: {
           secrets: [...toDeleteSecrets],
@@ -227,15 +248,15 @@ export const AddSecretsDialog = () => {
       });
 
       showToaster({ type: 'success', title: 'Successfully deleted' });
+      setToDeleteSecrets(new Set());
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        showToaster({
-          type: 'error',
-          title: error.response?.data?.message || 'Failed to fetch groups',
-        });
-      }
+      showToaster({
+        type: 'error',
+        title: getErrorMessage(error, 'Failed to delete secrets'),
+      });
     } finally {
-      fetchGroup();
+      setDeleting(false);
+      await fetchGroup();
     }
   };
   return (
@@ -400,8 +421,17 @@ export const AddSecretsDialog = () => {
       </header>
       {toDeleteSecrets.size > 0 && (
         <div className="flex justify-end">
-          <Button onClick={deleteSecrets}>
-            <Trash2 />
+          <Button
+            variant="destructive"
+            onClick={() => void deleteSecrets()}
+            disabled={deleting}
+          >
+            {deleting ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="mr-2 h-4 w-4" />
+            )}
+            Delete {toDeleteSecrets.size} selected
           </Button>
         </div>
       )}
@@ -418,7 +448,9 @@ export const AddSecretsDialog = () => {
           <table className="w-full text-left text-sm">
             <thead className="bg-muted/50">
               <tr>
-                <th className="px-4 py-3 font-medium">Check</th>
+                <th className="px-4 py-3 font-medium">
+                  <span className="sr-only">Select</span>
+                </th>
                 <th className="px-4 py-3 font-medium">Key</th>
                 <th className="px-4 py-3 font-medium">Secret</th>
                 <th className="px-4 py-3 font-medium">Created</th>
@@ -430,12 +462,46 @@ export const AddSecretsDialog = () => {
                 <tr key={secret.id} className="border-t">
                   <td className="px-4 py-3 font-medium">
                     <Checkbox
+                      checked={toDeleteSecrets.has(secret.id)}
                       onCheckedChange={() => handleToDeleteSecrets(secret)}
+                      aria-label={`Select ${secret.key}`}
                     />
                   </td>
                   <td className="px-4 py-3 font-medium">{secret.key}</td>
-                  <td className="max-w-sm break-all px-4 py-3">
-                    {secret.secret}
+                  <td className="max-w-sm px-4 py-3">
+                    <div className="flex items-center gap-1">
+                      <span className="min-w-0 flex-1 break-all font-mono">
+                        {revealedSecrets.has(secret.id)
+                          ? secret.secret
+                          : '••••••••'}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => toggleReveal(secret)}
+                        aria-label={
+                          revealedSecrets.has(secret.id)
+                            ? `Hide ${secret.key}`
+                            : `Show ${secret.key}`
+                        }
+                      >
+                        {revealedSecrets.has(secret.id) ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => void copySecret(secret)}
+                        aria-label={`Copy ${secret.key}`}
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                     {new Date(secret.createdAt).toLocaleDateString()}
@@ -444,6 +510,7 @@ export const AddSecretsDialog = () => {
                     <Button
                       onClick={() => handleEdit(secret)}
                       className="hover:cursor-pointer"
+                      aria-label={`Edit ${secret.key}`}
                     >
                       <Edit />
                     </Button>
@@ -456,6 +523,7 @@ export const AddSecretsDialog = () => {
       )}
       {secret && (
         <EditSecretDialog
+          key={secret.id}
           refetch={fetchGroup}
           open={openEditDialog}
           secret={secret}

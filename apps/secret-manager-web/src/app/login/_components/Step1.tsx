@@ -2,8 +2,7 @@
 import { Button, Input } from '@org/ui';
 import * as yup from 'yup';
 import { Formik, Form, ErrorMessage } from 'formik';
-import { api } from '../../utils/axiosInstance';
-import axios from 'axios';
+import { api, getErrorMessage } from '../../utils/axiosInstance';
 import { showToaster } from '../../utils/toasters';
 
 type Step1Type = {
@@ -25,14 +24,10 @@ export const Step1 = ({ setStep, setEmail }: Step1Type) => {
       setStep((prev) => prev + 1);
       setEmail(email);
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const errorResponse = error.response;
-        showToaster({
-          type: 'error',
-          title: errorResponse?.data.message,
-          description: '',
-        });
-      }
+      showToaster({
+        type: 'error',
+        title: getErrorMessage(error, 'Failed to send OTP code'),
+      });
     }
   };
 
@@ -40,11 +35,9 @@ export const Step1 = ({ setStep, setEmail }: Step1Type) => {
     <Formik
       initialValues={{ email: '' }}
       validationSchema={emailSchema}
-      onSubmit={(values) => {
-        sendOtp(values.email);
-      }}
+      onSubmit={(values) => sendOtp(values.email.trim())}
     >
-      {({ isValid, dirty, values, setFieldValue }) => {
+      {({ isValid, dirty, isSubmitting, values, setFieldValue }) => {
         return (
           <Form className="space-y-4">
             <div className="space-y-2">
@@ -65,10 +58,10 @@ export const Step1 = ({ setStep, setEmail }: Step1Type) => {
 
             <Button
               type="submit"
-              disabled={!isValid || !dirty}
+              disabled={!isValid || !dirty || isSubmitting}
               className="w-full py-4 hover:cursor-pointer"
             >
-              Send OTP
+              {isSubmitting ? 'Sending...' : 'Send OTP'}
             </Button>
           </Form>
         );

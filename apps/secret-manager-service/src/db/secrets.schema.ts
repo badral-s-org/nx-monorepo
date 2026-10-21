@@ -1,23 +1,29 @@
-import { integer, text } from 'drizzle-orm/sqlite-core';
+import { integer, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sqliteTable } from 'drizzle-orm/sqlite-core';
 import { Groups } from './groups.schema';
 import { relations } from 'drizzle-orm';
 
-export const Secrets = sqliteTable('secrets', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  groupId: integer('group_id')
-    .notNull()
-    .references(() => Groups.id),
-  key: text('key').notNull(),
-  secret: text('secret').notNull(),
-  iv: text('iv').notNull(),
-  createdAt: integer('created_at', { mode: 'timestamp' })
-    .notNull()
-    .$defaultFn(() => new Date()),
-  updatedAt: integer('updated_at', { mode: 'timestamp' })
-    .notNull()
-    .$onUpdate(() => new Date()),
-});
+export const Secrets = sqliteTable(
+  'secrets',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    groupId: integer('group_id')
+      .notNull()
+      .references(() => Groups.id),
+    key: text('key').notNull(),
+    secret: text('secret').notNull(),
+    iv: text('iv').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp' })
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex('secrets_group_id_key_unique').on(table.groupId, table.key),
+  ],
+);
 
 export const secretsRelations = relations(Secrets, ({ one }) => ({
   group: one(Groups, {

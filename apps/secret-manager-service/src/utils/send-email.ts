@@ -1,22 +1,30 @@
 import { Resend } from 'resend';
+import type { Bindings } from '../types';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+export const sendEmail = async (
+  env: Bindings,
+  {
+    to,
+    content,
+    subject,
+  }: {
+    to: string;
+    content: string;
+    subject: string;
+  },
+) => {
+  if (!env.RESEND_API_KEY) {
+    throw new Error('RESEND_API_KEY is not configured');
+  }
 
-export const sendEmail = async ({
-  to,
-  content,
-  subject,
-}: {
-  to: string;
-  content: string;
-  subject: string;
-}) => {
+  const resend = new Resend(env.RESEND_API_KEY);
+
   const { error } = await resend.emails.send({
-    from: 'noreply@expense.tiim.mn',
+    from: env.EMAIL_FROM,
     to: [to],
-    subject: subject,
+    subject,
     html: content,
   });
 
-  if (error) throw new Error((error as Error).message);
+  if (error) throw new Error(`Failed to send email: ${error.message}`);
 };

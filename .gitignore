@@ -58,3 +58,6 @@ test-output
 out
 .vercel
 .env*
+
+# Cloudflare Wrangler local state
+.wrangler

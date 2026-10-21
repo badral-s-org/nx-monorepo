@@ -4,8 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Plus, Loader2, Folder, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button, Input, Label } from '@org/ui';
-import { api } from '../utils/axiosInstance';
-import axios from 'axios';
+import { api, getErrorMessage } from '../utils/axiosInstance';
 import { showToaster } from '../utils/toasters';
 import Link from 'next/link';
 
@@ -39,14 +38,10 @@ export default function Index() {
 
       setGroups(result.data);
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        showToaster({
-          type: 'error',
-          title: error.response?.data?.message || 'Failed to fetch groups',
-        });
-      } else {
-        toast.error('Failed to fetch groups');
-      }
+      showToaster({
+        type: 'error',
+        title: getErrorMessage(error, 'Failed to fetch groups'),
+      });
     } finally {
       setFetchingGroups(false);
     }
@@ -85,14 +80,10 @@ export default function Index() {
       // Refresh the list after creating a group.
       await fetchGroups();
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        showToaster({
-          type: 'error',
-          title: error.response?.data?.message || 'Failed to create group',
-        });
-      } else if (error instanceof Error) {
-        toast.error(error.message);
-      }
+      showToaster({
+        type: 'error',
+        title: getErrorMessage(error, 'Failed to create group'),
+      });
     } finally {
       setLoading(false);
     }

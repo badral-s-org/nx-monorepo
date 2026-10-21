@@ -1,13 +1,15 @@
+import { AppHeader } from '../components/AppHeader';
 import { AuthProvider } from '../providers/AuthProvider';
 
-export default function RootLayout({
+export default function ProtectedLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <AuthProvider>{children}</AuthProvider>
-    </div>
+    <AuthProvider>
+      <AppHeader />
+      {children}
+    </AuthProvider>
   );
 }

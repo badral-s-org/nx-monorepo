@@ -11,6 +11,9 @@ export default [
       '**/vitest.config.*.timestamp*',
       '**/test-output',
       '**/out-tsc',
+      '**/.next',
+      '**/.wrangler',
+      '**/worker-configuration.d.ts',
     ],
   },
   {
